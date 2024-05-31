@@ -85,30 +85,54 @@ CREATE TABLE curriculum.offerings (
 	FOREIGN KEY (course_id) REFERENCES curriculum.subjects (course_id) ON DELETE CASCADE ON UPDATE CASCADE
 );
 
--- define a select statement to get all students enrolled in a course
-SELECT 
-	courses.students.student_id,
-	courses.students.first_name,
-	courses.students.last_name,
-	courses.students.email,
-	courses.students.phone,
-	courses.students.city,
-	courses.students.state,
-	courses.students.zip_code,
-	courses.registrations.registration_id,
-	courses.registrations.registration_status,
-	courses.registrations.registration_date,
-	courses.registrations.required_date,
-	courses.registrations.completion_date,
-	courses.registrations.location_id,
-	courses.registrations.staff_id,
-	courses.registration_items.item_id,
-	courses.registration_items.course_id,
-	courses.registration_items.quantity,
-	courses.registration_items.class_hours,
-	courses.registration_items.lab_hours
-FROM courses.students
-JOIN courses.registrations ON courses.students.student_id = courses.registrations.student_id
-JOIN courses.registration_items ON courses.registrations.registration_id = courses.registration_items.registration_id
-WHERE courses.registration_items.course_id = 1;
-	
+
+-- write an index to improve the performance of the query
+CREATE INDEX idx_student_name ON courses.students (last_name, first_name);
+CREATE INDEX idx_location_name ON courses.locations (location_name);
+CREATE INDEX idx_staff_name ON courses.staffs (last_name, first_name);
+CREATE INDEX idx_registration_status ON courses.registrations (registration_status);
+CREATE INDEX idx_registration_date ON courses.registrations (registration_date);
+CREATE INDEX idx_required_date ON courses.registrations (required_date);
+CREATE INDEX idx_completion_date ON courses.registrations (completion_date);
+CREATE INDEX idx_registration_items ON courses.registration_items (course_id);
+CREATE INDEX idx_offerings ON curriculum.offerings (location_id, course_id);
+
+
+-- define a table for student attendance to capture attendance by class
+CREATE TABLE courses.attendance (
+    attendance_id INT IDENTITY (1, 1) PRIMARY KEY,
+    registration_id INT NOT NULL,
+    attendance_date DATE NOT NULL,
+    attendance_status tinyint NOT NULL,
+    -- Attendance status: 1 = Absent; 2 = Present; 3 = Excused
+    FOREIGN KEY (registration_id) REFERENCES courses.registrations (registration_id) ON DELETE CASCADE ON UPDATE CASCADE
+);
+
+
+-- define a stored procedure to get course enrollment by location
+CREATE PROCEDURE GetCourseEnrollmentByLocation
+    @location_id INT
+AS
+BEGIN
+    SELECT c.course_id, c.product_name, COUNT(r.registration_id) AS enrollment
+    FROM curriculum.subjects AS c
+    INNER JOIN courses.registration_items AS ri ON c.course_id = ri.course_id
+    INNER JOIN courses.registrations AS r ON ri.registration_id = r.registration_id
+    WHERE r.location_id = @location_id
+    GROUP BY c.course_id, c.product_name;
+END;
+
+CREATE PROCEDURE GetInstructorDetailsByLocation
+    @instructor_id INT
+AS
+BEGIN
+    SELECT i.instructor_id, i.instructor_name, l.location_id, l.location_name, c.course_id, c.course_name
+    FROM instructors AS i
+    INNER JOIN locations AS l ON i.location_id = l.location_id
+    INNER JOIN courses AS c ON i.instructor_id = c.instructor_id
+    WHERE i.instructor_id = @instructor_id;
+END;
+
+SELECT * 
+FROM courses.registrations 
+WHERE registration_date >= '2023-09-01' AND registration_date < '2023-10-01';
